@@ -6,6 +6,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/database/db_helper.dart';
 import '../../core/safety/safety_validator.dart';
 import '../../models/motorcycle_model.dart';
+import '../../widgets/safety_score_widget.dart';
+import '../../widgets/warning_dialog.dart';
 import 'fault_code_screen.dart';
 
 class PreRemapScreen extends ConsumerStatefulWidget {
@@ -90,7 +92,6 @@ class _PreRemapScreenState extends ConsumerState<PreRemapScreen> {
     }
 
     final result = _result;
-    final levelColor = _levelColor(result.level);
     final canProceed = result.level != SafetyLevel.hardLock &&
         !result.backupRequired &&
         _scanDone;
@@ -101,7 +102,7 @@ class _PreRemapScreenState extends ConsumerState<PreRemapScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           // Safety score
-          _ScoreCard(result: result, levelColor: levelColor),
+          _ScoreCard(result: result),
           const SizedBox(height: 16),
 
           // 1. Fault code scan
@@ -150,7 +151,10 @@ class _PreRemapScreenState extends ConsumerState<PreRemapScreen> {
               ),
               onPressed: canProceed
                   ? () async {
-                      // Persist pre-remap score so PostRemapScreen can include it in SessionLog
+                      if (_result.level == SafetyLevel.warning) {
+                        final ok = await showSafetyResultDialog(context, _result);
+                        if (!ok || !mounted) return;
+                      }
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.setInt('pre_remap_score', _result.score);
                       if (mounted) Navigator.pushNamed(context, '/tune-profiles');
@@ -374,12 +378,6 @@ class _PreRemapScreenState extends ConsumerState<PreRemapScreen> {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  Color _levelColor(SafetyLevel level) => switch (level) {
-        SafetyLevel.approved => AppColors.safe,
-        SafetyLevel.warning => AppColors.warning,
-        SafetyLevel.hardLock => AppColors.danger,
-      };
-
   Future<void> _openFaultCodeScreen() async {
     final count = await Navigator.push<int>(
       context,
@@ -401,16 +399,16 @@ class _PreRemapScreenState extends ConsumerState<PreRemapScreen> {
 
 class _ScoreCard extends StatelessWidget {
   final SafetyValidationResult result;
-  final Color levelColor;
-  const _ScoreCard({required this.result, required this.levelColor});
+  const _ScoreCard({required this.result});
+
+  Color get _levelColor => switch (result.level) {
+    SafetyLevel.approved => AppColors.safe,
+    SafetyLevel.warning => AppColors.warning,
+    SafetyLevel.hardLock => AppColors.danger,
+  };
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (result.level) {
-      SafetyLevel.approved => 'LIGTAS',
-      SafetyLevel.warning => 'BABALA',
-      SafetyLevel.hardLock => 'BLOCKED',
-    };
     final subtext = switch (result.level) {
       SafetyLevel.approved => 'Handa ang motorsiklo para sa remap.',
       SafetyLevel.warning => 'May mga isyu — magpatuloy nang maingat.',
@@ -422,43 +420,18 @@ class _ScoreCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: levelColor, width: 2),
+        border: Border.all(color: _levelColor, width: 2),
       ),
-      child: Row(children: [
-        SizedBox(
-          width: 64,
-          height: 64,
-          child: Stack(alignment: Alignment.center, children: [
-            CircularProgressIndicator(
-              value: result.score / 100,
-              backgroundColor: AppColors.cardBorder,
-              color: levelColor,
-              strokeWidth: 6,
-            ),
-            Text(
-              '${result.score}',
-              style: TextStyle(
-                  color: levelColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16),
-            ),
-          ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text(
+          'Pre-Remap Score',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Pre-Remap Score',
-                style:
-                    TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-            Text(label,
-                style: TextStyle(
-                    color: levelColor,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700)),
-            Text(subtext,
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 12)),
-          ]),
+        const SizedBox(height: 8),
+        SafetyScoreWidget(
+          score: result.score,
+          level: result.level,
+          subtitle: subtext,
         ),
       ]),
     );

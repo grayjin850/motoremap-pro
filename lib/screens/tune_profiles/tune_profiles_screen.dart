@@ -7,6 +7,8 @@ import '../../core/database/db_helper.dart';
 import '../../core/safety/safety_validator.dart';
 import '../../models/motorcycle_model.dart';
 import '../../models/tune_profile.dart';
+import '../../widgets/safety_score_widget.dart';
+import '../../widgets/warning_dialog.dart';
 
 class TuneProfilesScreen extends ConsumerStatefulWidget {
   const TuneProfilesScreen({super.key});
@@ -61,49 +63,56 @@ class _TuneProfilesScreenState extends ConsumerState<TuneProfilesScreen> {
     await prefs.setString('selected_profile_id', p.id);
   }
 
-  void _navigate(String route) {
+  Future<void> _navigate(String route) async {
     if (!_backupConfirmed) return;
     final profile = _profiles[_pageIndex];
-    if (!SafetyValidator.requiresVvaWarning(model: _model!, profile: profile)) {
-      _setSelectedProfile(profile)
-          .then((_) { if (mounted) Navigator.pushNamed(context, route); });
+    final result = SafetyValidator.calculateTuneSafetyScore(
+      model: _model!,
+      profile: profile,
+      backupConfirmed: _backupConfirmed,
+    );
+
+    if (result.level == SafetyLevel.hardLock) {
+      await showSafetyResultDialog(context, result);
       return;
     }
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Row(children: [
-          const Icon(Icons.warning, color: AppColors.vvaZone),
-          const SizedBox(width: 8),
-          const Text('VVA Zone Warning'),
-        ]),
-        content: Text(
-          '${_model!.brand} ${_model!.model} ay may VVA (Variable Valve Actuation) '
-          'na nag-a-activate sa ~${_model!.vvaTransitionRpm} RPM.\n\n'
-          'Ang timing advance na ${profile.timingAdvanceDeg}° ay nangangailangan '
-          'ng espesyal na atensyon sa 5,800–6,200 RPM zone. '
-          'Mag-monitor nang mabuti para sa knock o abnormal na vibration.',
+
+    if (SafetyValidator.requiresVvaWarning(model: _model!, profile: profile)) {
+      if (!mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.warning, color: AppColors.vvaZone),
+            SizedBox(width: 8),
+            Text('VVA Zone Warning'),
+          ]),
+          content: Text(
+            '${_model!.brand} ${_model!.model} ay may VVA (Variable Valve Actuation) '
+            'na nag-a-activate sa ~${_model!.vvaTransitionRpm} RPM.\n\n'
+            'Ang timing advance na ${profile.timingAdvanceDeg}° ay nangangailangan '
+            'ng espesyal na atensyon sa 5,800–6,200 RPM zone. '
+            'Mag-monitor nang mabuti para sa knock o abnormal na vibration.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Bumalik',
+                  style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.vvaZone),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Naintindihan, Magpatuloy'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Bumalik',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppColors.vvaZone),
-            onPressed: () {
-              Navigator.pop(context);
-              _setSelectedProfile(profile).then((_) {
-                if (mounted) Navigator.pushNamed(context, route);
-              });
-            },
-            child: const Text('Naintindihan, Magpatuloy'),
-          ),
-        ],
-      ),
-    );
+      );
+      if (ok != true || !mounted) return;
+    }
+
+    await _setSelectedProfile(profile);
+    if (mounted) Navigator.pushNamed(context, route);
   }
 
   @override
@@ -262,6 +271,7 @@ class _ProfileCard extends StatelessWidget {
       SafetyLevel.warning => 'BABALA',
       SafetyLevel.hardLock => 'BLOCKED',
     };
+    // scoreColor/scoreLabel kept for vvaWarning chip; ring replaced by SafetyScoreRing
     final typeIcon = switch (profile.type) {
       ProfileType.topSpeed => Icons.speed,
       ProfileType.cityResponse => Icons.location_city,
@@ -331,22 +341,7 @@ class _ProfileCard extends StatelessWidget {
                 children: [
                   // Score row
                   Row(children: [
-                    SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: Stack(alignment: Alignment.center, children: [
-                        CircularProgressIndicator(
-                          value: result.score / 100,
-                          backgroundColor: AppColors.cardBorder,
-                          color: scoreColor,
-                          strokeWidth: 5,
-                        ),
-                        Text('${result.score}',
-                            style: TextStyle(
-                                color: scoreColor,
-                                fontWeight: FontWeight.bold)),
-                      ]),
-                    ),
+                    SafetyScoreRing(score: result.score, level: result.level, size: 56),
                     const SizedBox(width: 12),
                     Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
