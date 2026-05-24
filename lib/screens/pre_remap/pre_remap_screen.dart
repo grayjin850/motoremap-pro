@@ -149,7 +149,12 @@ class _PreRemapScreenState extends ConsumerState<PreRemapScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: canProceed
-                  ? () => Navigator.pushNamed(context, '/tune-profiles')
+                  ? () async {
+                      // Persist pre-remap score so PostRemapScreen can include it in SessionLog
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setInt('pre_remap_score', _result.score);
+                      if (mounted) Navigator.pushNamed(context, '/tune-profiles');
+                    }
                   : null,
             ),
           ),
