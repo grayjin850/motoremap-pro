@@ -9,7 +9,7 @@ import 'models_seed.dart';
 /// Central SQLite helper for MotoRemap Pro.
 /// All DB access goes through the singleton [database] getter.
 class DbHelper {
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
   static const String _dbName = 'motoremap.db';
 
   static Database? _database;
@@ -58,6 +58,10 @@ class DbHelper {
           'ALTER TABLE sessions ADD COLUMN obd_baseline TEXT');
       // Seed profiles for bikes that had none in v1
       await ModelsSeed.seedAdditionalProfiles(db);
+    }
+    if (oldVersion < 3) {
+      // v2 → v3: add Suzuki Raider R150 FI, GSX-S150, Address 125
+      await ModelsSeed.seedSuzukiData(db);
     }
   }
 

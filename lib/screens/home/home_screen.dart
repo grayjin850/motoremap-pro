@@ -372,14 +372,14 @@ class _QuickActionCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _OBDStatusBanner extends ConsumerWidget {
-  final AsyncValue<BluetoothConnectionStatus> btStatus;
+  final AsyncValue<AdapterConnectionStatus> btStatus;
 
   const _OBDStatusBanner({required this.btStatus});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = btStatus.valueOrNull ?? BluetoothConnectionStatus.disconnected;
-    final connected = status == BluetoothConnectionStatus.connected;
+    final status = btStatus.valueOrNull ?? AdapterConnectionStatus.disconnected;
+    final connected = status == AdapterConnectionStatus.connected;
 
     return GestureDetector(
       onTap: () => _showBTScanDialog(context, ref),
@@ -495,7 +495,7 @@ class _BTScanDialogState extends ConsumerState<_BTScanDialog> {
                       return ListTile(
                         leading: const Icon(Icons.bluetooth, color: AppColors.primary),
                         title: Text(
-                          device.name,
+                          device.name ?? device.address,
                           style: GoogleFonts.inter(
                             color: AppColors.textPrimary,
                             fontSize: 14,
@@ -511,7 +511,7 @@ class _BTScanDialogState extends ConsumerState<_BTScanDialog> {
                         onTap: () async {
                           Navigator.of(context).pop();
                           final service = ref.read(bluetoothServiceProvider);
-                          await service.connect(device);
+                          await service.connectToDevice(device);
                         },
                       );
                     },

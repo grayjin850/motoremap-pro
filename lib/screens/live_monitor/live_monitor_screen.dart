@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/afr_calculator.dart';
 import '../../services/bluetooth_service.dart';
 import '../../services/obd_service.dart';
+import '../../widgets/live_chart_widget.dart';
 
 class LiveMonitorScreen extends ConsumerStatefulWidget {
   const LiveMonitorScreen({super.key});
@@ -16,7 +17,7 @@ class LiveMonitorScreen extends ConsumerStatefulWidget {
 class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
   final List<OBDReading> _log = [];
   bool _isRecording = false;
-  bool _showLog = false;
+  int _viewIndex = 0; // 0 = gauges, 1 = charts, 2 = log
   static const _maxLog = 200;
 
   String? _criticalAlert;
@@ -45,7 +46,7 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
 
     final obdAsync = ref.watch(obdReadingProvider);
     final btStatus = ref.watch(bluetoothStatusProvider).valueOrNull
-        ?? BluetoothConnectionStatus.disconnected;
+        ?? AdapterConnectionStatus.disconnected;
     final reading = obdAsync.when(
       data: (r) => r,
       loading: () => OBDReading.empty(),
@@ -61,15 +62,19 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
   }
 
   Widget _buildMainScaffold(
-      BuildContext context, OBDReading reading, BluetoothConnectionStatus btStatus) {
+      BuildContext context, OBDReading reading, AdapterConnectionStatus btStatus) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live OBD Monitor'),
         actions: [
           IconButton(
-            icon: Icon(_showLog ? Icons.dashboard_outlined : Icons.table_rows_outlined),
-            tooltip: _showLog ? 'Ipakita ang Gauges' : 'Ipakita ang Log',
-            onPressed: () => setState(() => _showLog = !_showLog),
+            icon: Icon(_viewIndex == 0 ? Icons.show_chart_outlined
+                : _viewIndex == 1 ? Icons.table_rows_outlined
+                : Icons.dashboard_outlined),
+            tooltip: _viewIndex == 0 ? 'Ipakita ang Charts'
+                : _viewIndex == 1 ? 'Ipakita ang Log'
+                : 'Ipakita ang Gauges',
+            onPressed: () => setState(() => _viewIndex = (_viewIndex + 1) % 3),
           ),
           IconButton(
             icon: Icon(
@@ -92,7 +97,9 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
           if (_criticalAlert != null) _buildAlertBanner(_criticalAlert!, isCritical: true),
           if (_warningAlert != null) _buildAlertBanner(_warningAlert!, isCritical: false),
           if (!reading.hasAnyData) _buildNoDataBanner(),
-          Expanded(child: _showLog ? _buildLogView() : _buildGaugeGrid(reading)),
+          Expanded(child: _viewIndex == 2 ? _buildLogView()
+              : _viewIndex == 1 ? LiveChartWidget(readings: _log)
+              : _buildGaugeGrid(reading)),
         ],
       ),
     );
@@ -310,6 +317,65 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
                   ? '⚠ ACTIVE KNOCK — ihinto!'
                   : 'Normal — walang knock',
         ),
+        _GaugeCard(
+          label: 'Intake Air Temp',
+          value: r.intakeAirTempC?.toString(),
+          unit: '°C',
+          progress: r.intakeAirTempC != null
+              ? ((r.intakeAirTempC! + 40) / 120).clamp(0.0, 1.0)
+              : null,
+          color: r.intakeAirTempC == null ? AppColors.textSecondary
+              : r.intakeAirTempC! > 60 ? AppColors.danger
+              : r.intakeAirTempC! > 45 ? AppColors.warning
+              : AppColors.safe,
+          rangeLabel: '-40 – 80°C',
+          footnote: 'Hot intake air reduces\ndensity — affects fueling',
+        ),
+        _GaugeCard(
+          label: 'Engine Load',
+          value: r.engineLoadPercent?.toStringAsFixed(1),
+          unit: '%',
+          progress: r.engineLoadPercent != null ? r.engineLoadPercent! / 100 : null,
+          color: AppColors.primary,
+          rangeLabel: '0 – 100%',
+        ),
+        _GaugeCard(
+          label: 'STFT',
+          value: r.fuelTrimShortTermPct != null
+              ? '${r.fuelTrimShortTermPct! >= 0 ? "+" : ""}${r.fuelTrimShortTermPct!.toStringAsFixed(1)}'
+              : null,
+          unit: '%',
+          progress: r.fuelTrimShortTermPct != null
+              ? ((r.fuelTrimShortTermPct! + 25) / 50).clamp(0.0, 1.0)
+              : null,
+          color: r.fuelTrimShortTermPct == null ? AppColors.textSecondary
+              : r.fuelTrimShortTermPct!.abs() > 10 ? AppColors.danger
+              : r.fuelTrimShortTermPct!.abs() > 5 ? AppColors.warning
+              : AppColors.safe,
+          rangeLabel: '-25% – +25%',
+          footnote: r.fuelTrimShortTermPct == null ? null
+              : r.fuelTrimShortTermPct! > 5
+                  ? 'Lean — ECU adding fuel'
+                  : r.fuelTrimShortTermPct! < -5
+                      ? 'Rich — ECU cutting fuel'
+                      : 'Normal range',
+        ),
+        _GaugeCard(
+          label: 'LTFT',
+          value: r.fuelTrimLongTermPct != null
+              ? '${r.fuelTrimLongTermPct! >= 0 ? "+" : ""}${r.fuelTrimLongTermPct!.toStringAsFixed(1)}'
+              : null,
+          unit: '%',
+          progress: r.fuelTrimLongTermPct != null
+              ? ((r.fuelTrimLongTermPct! + 25) / 50).clamp(0.0, 1.0)
+              : null,
+          color: r.fuelTrimLongTermPct == null ? AppColors.textSecondary
+              : r.fuelTrimLongTermPct!.abs() > 10 ? AppColors.danger
+              : r.fuelTrimLongTermPct!.abs() > 5 ? AppColors.warning
+              : AppColors.safe,
+          rangeLabel: '-25% – +25%',
+          footnote: 'Persistent ECU correction.\nLarge LTFT = O2 sensor issue',
+        ),
       ],
     );
   }
@@ -409,17 +475,17 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
   // Status, alert, no-data banners
   // ---------------------------------------------------------------------------
 
-  Widget _buildStatusBar(BluetoothConnectionStatus status) {
-    final isConnected = status == BluetoothConnectionStatus.connected;
-    final isScanning = status == BluetoothConnectionStatus.scanning ||
-        status == BluetoothConnectionStatus.connecting;
+  Widget _buildStatusBar(AdapterConnectionStatus status) {
+    final isConnected = status == AdapterConnectionStatus.connected;
+    final isScanning = status == AdapterConnectionStatus.scanning ||
+        status == AdapterConnectionStatus.connecting;
     final color = isConnected ? AppColors.safe : isScanning ? AppColors.warning : AppColors.textSecondary;
     final label = switch (status) {
-      BluetoothConnectionStatus.connected => 'OBD Connected',
-      BluetoothConnectionStatus.connecting => 'Connecting...',
-      BluetoothConnectionStatus.scanning => 'Scanning for OBD...',
-      BluetoothConnectionStatus.error => 'Connection Error',
-      BluetoothConnectionStatus.disconnected => 'OBD Disconnected',
+      AdapterConnectionStatus.connected => 'OBD Connected',
+      AdapterConnectionStatus.connecting => 'Connecting...',
+      AdapterConnectionStatus.scanning => 'Scanning for OBD...',
+      AdapterConnectionStatus.error => 'Connection Error',
+      AdapterConnectionStatus.disconnected => 'OBD Disconnected',
     };
 
     return Container(
@@ -515,7 +581,9 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
 
   void _exportCsv() {
     final buf = StringBuffer();
-    buf.writeln('Timestamp,RPM,TPS%,CoolantTempC,BatteryV,O2SensorV,MAP_kPa,KnockRetard_deg');
+    buf.writeln(
+        'Timestamp,RPM,TPS%,CoolantTempC,BatteryV,O2SensorV,MAP_kPa,'
+        'IAT_C,EngineLoad%,STFT%,LTFT%,FuelPressure_kPa,KnockRetard_deg');
     for (final r in _log) {
       buf.writeln(
           '${r.timestamp.toIso8601String()},'
@@ -525,6 +593,11 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
           '${r.batteryVoltage?.toStringAsFixed(2) ?? ""},'
           '${r.o2SensorVoltage?.toStringAsFixed(3) ?? ""},'
           '${r.mapKpa ?? ""},'
+          '${r.intakeAirTempC ?? ""},'
+          '${r.engineLoadPercent?.toStringAsFixed(1) ?? ""},'
+          '${r.fuelTrimShortTermPct?.toStringAsFixed(1) ?? ""},'
+          '${r.fuelTrimLongTermPct?.toStringAsFixed(1) ?? ""},'
+          '${r.fuelPressureKpa?.toStringAsFixed(0) ?? ""},'
           '${r.knockRetardDeg?.toStringAsFixed(2) ?? ""}');
     }
     ScaffoldMessenger.of(context).showSnackBar(

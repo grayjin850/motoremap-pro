@@ -1,197 +1,122 @@
-// MOCK — replace with real BT implementation
-//
-// Note: flutter_bluetooth_serial (Classic Bluetooth / BR/EDR) is NOT in pubspec.yaml.
-// This file provides the full public API surface that the rest of the app depends on.
-// When a physical Android device is available, add flutter_bluetooth_serial to pubspec.yaml
-// and replace the mock body below with real FlutterBluetoothSerial calls.
-//
-// Android 12+ limitation (when real impl is added): flutter_bluetooth_serial ^0.4.0 requires
-// the legacy BLUETOOTH_CONNECT + BLUETOOTH_SCAN permissions and may not work on Android 12+
-// without additional manifest flags. Consider migrating to flutter_bluetooth_classic or a
-// custom platform channel once Android 12+ support is needed.
-
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import '../core/protocols/adapter_interface.dart';
+import '../core/protocols/elm327_adapter.dart';
+import '../core/protocols/mock_adapter.dart';
+import '../core/protocols/adapter_registry.dart';
+
+export '../core/protocols/adapter_interface.dart' show AdapterConnectionStatus;
+export 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'
+    show BluetoothDevice;
 
 // ---------------------------------------------------------------------------
-// Enums & value types
+// BluetoothService
 // ---------------------------------------------------------------------------
 
-enum BluetoothConnectionStatus {
-  disconnected,
-  scanning,
-  connecting,
-  connected,
-  error,
-}
-
-class BluetoothDevice {
-  final String name;
-  final String address;
-
-  const BluetoothDevice({required this.name, required this.address});
-
-  @override
-  String toString() => 'BluetoothDevice($name @ $address)';
-}
-
-// ---------------------------------------------------------------------------
-// BluetoothService — singleton, mock implementation
-// ---------------------------------------------------------------------------
-
+/// Manages the lifecycle of the active ECU communication adapter.
+///
+/// In debug builds the app automatically uses [MockAdapter] so developers
+/// can run without real OBD hardware. On a physical device call
+/// [scanForOBDAdapters] → user picks a device → [connectToDevice].
+///
+/// The active [AdapterInterface] is then passed to [OBDService.initialize].
 class BluetoothService {
-  // Singleton
   static final BluetoothService _instance = BluetoothService._internal();
   factory BluetoothService() => _instance;
   BluetoothService._internal();
 
-  // Status management
-  BluetoothConnectionStatus _status = BluetoothConnectionStatus.disconnected;
-  final StreamController<BluetoothConnectionStatus> _statusController =
-      StreamController<BluetoothConnectionStatus>.broadcast();
+  AdapterInterface? _adapter;
+  StreamSubscription<AdapterConnectionStatus>? _adapterStatusSub;
 
-  // Simulated connected device
-  BluetoothDevice? _connectedDevice;
-
-  // Command/response buffer for mock (simulates ELM327 responses)
-  int _pollCount = 0;
+  final StreamController<AdapterConnectionStatus> _statusController =
+      StreamController<AdapterConnectionStatus>.broadcast();
+  AdapterConnectionStatus _status = AdapterConnectionStatus.disconnected;
 
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
-  BluetoothConnectionStatus get connectionStatus => _status;
+  AdapterConnectionStatus get connectionStatus => _status;
+  Stream<AdapterConnectionStatus> get statusStream => _statusController.stream;
 
-  Stream<BluetoothConnectionStatus> get statusStream =>
-      _statusController.stream;
+  /// The currently active adapter. Null when not connected.
+  AdapterInterface? get adapter => _adapter;
 
-  BluetoothDevice? get connectedDevice => _connectedDevice;
+  bool get isConnected => _status == AdapterConnectionStatus.connected;
 
-  /// Scan for nearby Bluetooth devices and return those that look like OBD adapters.
-  /// MOCK: returns a pre-defined list of fake OBD adapters after a short delay.
+  /// Returns the display name of the currently active adapter, or null.
+  String? get connectedAdapterName => _adapter?.adapterName;
+
+  // ---------------------------------------------------------------------------
+  // Scanning
+  // ---------------------------------------------------------------------------
+
+  /// Scan for paired Bluetooth Classic devices that look like OBD adapters.
+  ///
+  /// In debug builds returns a fake list. On a real device returns paired
+  /// devices whose names match OBD adapter naming patterns.
   Future<List<BluetoothDevice>> scanForOBDAdapters() async {
-    _setStatus(BluetoothConnectionStatus.scanning);
-    // Simulate scan delay
-    await Future<void>.delayed(const Duration(seconds: 2));
-    _setStatus(BluetoothConnectionStatus.disconnected);
+    _setStatus(AdapterConnectionStatus.scanning);
+    await Future<void>.delayed(const Duration(seconds: 1));
+    _setStatus(AdapterConnectionStatus.disconnected);
 
-    // MOCK — in real impl, call FlutterBluetoothSerial.instance.getBondedDevices()
-    // and filter with isLikelyOBDAdapter()
-    return const [
-      BluetoothDevice(name: 'OBD2-ELM327', address: '00:1D:A5:68:98:8B'),
-      BluetoothDevice(name: 'VLINK OBD', address: '00:0D:18:00:00:12'),
-      BluetoothDevice(name: 'ELM327 v2.1', address: '00:1D:A5:00:00:01'),
-    ];
+    if (kDebugMode) {
+      return [
+        // Fake entries so the UI shows something in the debugger
+        const BluetoothDevice(name: 'Mock ELM327 (Dev)', address: '00:00:00:00:00:00'),
+        const BluetoothDevice(name: 'OBDLink MX+', address: '00:1D:A5:68:98:8B'),
+      ];
+    }
+
+    final paired = await Elm327BluetoothAdapter.getPairedDevices();
+    // Show all paired devices; let the user identify their OBD adapter
+    return paired;
   }
 
-  /// Connect to a specific OBD adapter.
-  /// MOCK: always succeeds after a short delay.
-  Future<bool> connect(BluetoothDevice device) async {
-    _setStatus(BluetoothConnectionStatus.connecting);
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+  // ---------------------------------------------------------------------------
+  // Connection
+  // ---------------------------------------------------------------------------
 
-    // MOCK — in real impl:
-    // final connection = await BluetoothConnection.toAddress(device.address);
-    // store connection, return true on success, false on exception
-    _connectedDevice = device;
-    _pollCount = 0;
-    _setStatus(BluetoothConnectionStatus.connected);
-    return true;
+  /// Connect to a Bluetooth device by its MAC address.
+  ///
+  /// Uses [MockAdapter] in debug mode when the address is the mock sentinel.
+  /// Otherwise creates a real [Elm327BluetoothAdapter].
+  Future<bool> connectToDevice(BluetoothDevice device) async {
+    await _disposeCurrentAdapter();
+
+    final useMock = kDebugMode && device.address == '00:00:00:00:00:00';
+    _adapter = useMock ? MockAdapter() : Elm327BluetoothAdapter();
+
+    _adapterStatusSub = _adapter!.statusStream.listen(_setStatus);
+    return _adapter!.connect(device.address);
   }
 
-  /// Send a raw command to the ELM327 adapter and return the response string.
-  /// Returns null on timeout or if not connected.
-  /// MOCK: returns pre-scripted ELM327-style responses for development.
-  Future<String?> sendCommand(
-    String command, {
-    Duration timeout = const Duration(seconds: 3),
-  }) async {
-    if (_status != BluetoothConnectionStatus.connected) return null;
-
-    // Simulate I/O latency
-    await Future<void>.delayed(const Duration(milliseconds: 60));
-
-    // MOCK — in real impl: write bytes to BluetoothConnection.output,
-    // read from BluetoothConnection.input until '>' prompt, apply timeout.
-    return _mockResponse(command);
-  }
-
-  /// Disconnect cleanly and reset state.
+  /// Disconnect and clean up the current adapter.
   Future<void> disconnect() async {
-    // MOCK — in real impl: await _connection?.close()
-    _connectedDevice = null;
-    _pollCount = 0;
-    _setStatus(BluetoothConnectionStatus.disconnected);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helper — OBD adapter name filter
-  // ---------------------------------------------------------------------------
-
-  /// Returns true if the device name looks like an OBD/ELM327 adapter.
-  bool isLikelyOBDAdapter(String name) {
-    final lower = name.toLowerCase();
-    return lower.contains('obd') ||
-        lower.contains('elm') ||
-        lower.contains('vlink') ||
-        lower.contains('scan') ||
-        lower.contains('diag');
+    await _disposeCurrentAdapter();
   }
 
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  void _setStatus(BluetoothConnectionStatus s) {
-    _status = s;
-    _statusController.add(s);
+  Future<void> _disposeCurrentAdapter() async {
+    await _adapterStatusSub?.cancel();
+    _adapterStatusSub = null;
+    _adapter?.dispose();
+    _adapter = null;
+    _setStatus(AdapterConnectionStatus.disconnected);
   }
 
-  /// Produces realistic ELM327 mock responses keyed by command.
-  String _mockResponse(String command) {
-    _pollCount++;
-    // Vary RPM realistically over time (idle ~1000, climbs to ~5000 then back)
-    final cyclePos = _pollCount % 40;
-    final rpmRaw = 1000 + (cyclePos < 20 ? cyclePos * 200 : (40 - cyclePos) * 200);
-
-    switch (command.toUpperCase().trim()) {
-      case 'ATZ':
-        return 'ELM327 v2.1\r\n>';
-      case 'ATE0':
-      case 'ATL0':
-      case 'ATH0':
-      case 'ATSP0':
-        return 'OK\r\n>';
-      case '0100':
-        return '4100BE3EA813\r\n>';
-      case '010C': // RPM
-        // Encode rpmRaw back to ELM327 format: (rpmRaw * 4) split into two bytes
-        final encoded = (rpmRaw * 4).round();
-        final a = (encoded >> 8) & 0xFF;
-        final b = encoded & 0xFF;
-        return '410C${a.toRadixString(16).padLeft(2, '0').toUpperCase()}'
-            '${b.toRadixString(16).padLeft(2, '0').toUpperCase()}\r\n>';
-      case '0111': // Throttle position
-        // 20% throttle
-        final tpsRaw = (20 * 255 ~/ 100);
-        return '4111${tpsRaw.toRadixString(16).padLeft(2, '0').toUpperCase()}\r\n>';
-      case '0105': // Coolant temp
-        // 85°C → raw = 85 + 40 = 125
-        return '410579\r\n>'; // 0x79 = 121 → 121-40 = 81°C
-      case 'ATRV': // Battery voltage
-        return '12.6V\r\n>';
-      case '0114': // O2 sensor
-        // 0.45V → raw = 0.45 / 0.005 = 90 = 0x5A
-        return '41145A\r\n>';
-      case '010B': // MAP sensor
-        // 95 kPa
-        return '41115F\r\n>'; // Note: '010B' response header would be '410B'
-      default:
-        return 'NODATA\r\n>';
-    }
+  void _setStatus(AdapterConnectionStatus s) {
+    _status = s;
+    if (!_statusController.isClosed) _statusController.add(s);
   }
 
   void dispose() {
+    _disposeCurrentAdapter();
     _statusController.close();
   }
 }
@@ -206,7 +131,17 @@ final bluetoothServiceProvider = Provider<BluetoothService>((ref) {
   return service;
 });
 
-final bluetoothStatusProvider = StreamProvider<BluetoothConnectionStatus>((ref) {
+final bluetoothStatusProvider = StreamProvider<AdapterConnectionStatus>((ref) {
   final service = ref.watch(bluetoothServiceProvider);
   return service.statusStream;
 });
+
+/// Provides the active [AdapterInterface]. Null when no device is connected.
+final activeAdapterProvider = Provider<AdapterInterface?>((ref) {
+  ref.watch(bluetoothStatusProvider); // recompute when status changes
+  return ref.watch(bluetoothServiceProvider).adapter;
+});
+
+/// For backwards compatibility — exposes adapter registry with mock for tests.
+AdapterInterface createMockAdapter() =>
+    AdapterRegistry.createAdapter(preferred: PreferredAdapter.mock);

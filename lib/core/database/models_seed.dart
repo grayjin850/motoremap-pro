@@ -75,6 +75,9 @@ class ModelsSeed {
     await _seedCb150rProfiles(db);
     await _seedClick125iProfiles(db);
     await _seedR3Profiles(db);
+    await _seedRaiderR150FiProfiles(db);
+    await _seedGsxS150Profiles(db);
+    await _seedAddress125Profiles(db);
   }
 
   /// Called on v1 → v2 DB migration to seed bikes that had no profiles in v1.
@@ -85,6 +88,16 @@ class ModelsSeed {
     await _seedCb150rProfiles(db);
     await _seedClick125iProfiles(db);
     await _seedR3Profiles(db);
+  }
+
+  /// Called on v2 → v3 DB migration to seed the 3 new Suzuki models and profiles.
+  /// Uses ConflictAlgorithm.ignore so re-running on a fresh install is safe.
+  static Future<void> seedSuzukiData(Database db) async {
+    // Re-run _seedMotorcycles — conflict ignore skips existing bikes, inserts new ones
+    await _seedMotorcycles(db);
+    await _seedRaiderR150FiProfiles(db);
+    await _seedGsxS150Profiles(db);
+    await _seedAddress125Profiles(db);
   }
 
   // ---------------------------------------------------------------------------
@@ -302,6 +315,96 @@ class ModelsSeed {
         'max_safe_rev_raise': 13000,
         'knock_rpm_zones': '',
         'expected_speed_by_level': '1:178.0,2:184.0,3:189.0,4:195.0',
+      },
+      // 8. Suzuki Raider R150 FI
+      {
+        'id': 'suzuki_raider150fi_std_2018',
+        'brand': 'Suzuki',
+        'model': 'Raider R150 FI',
+        'year_from': 2018,
+        'year_to': 0,
+        'variant': 'Standard',
+        'displacement': 147,
+        'compression_ratio': 11.5,
+        'bore': 56.0,
+        'stroke': 59.7,
+        'valve_system': 'DOHC',
+        'valve_count': 4,
+        'has_vva': 0,
+        'vva_transition_rpm': 0,
+        'cooling': 'air',
+        'ecu_type': 'Denso FI',
+        'flash_tool': 'Suzuki SDS / K-Line Adapter',
+        'stock_rev_limit_soft': 11500,
+        'stock_rev_limit_hard': 12000,
+        'stock_speed_limit': 130,
+        'safe_afr_mid': 13.5,
+        'safe_afr_wot': 13.2,
+        'safe_afr_min': 13.0,
+        'safe_afr_max': 13.7,
+        'max_safe_rev_raise': 12000,
+        'knock_rpm_zones': '',
+        'expected_speed_by_level': '1:142.0,2:148.0,3:153.0,4:158.0',
+      },
+      // 9. Suzuki GSX-S150
+      {
+        'id': 'suzuki_gsxs150_std_2017',
+        'brand': 'Suzuki',
+        'model': 'GSX-S150',
+        'year_from': 2017,
+        'year_to': 0,
+        'variant': 'Standard',
+        'displacement': 147,
+        'compression_ratio': 11.5,
+        'bore': 56.0,
+        'stroke': 59.7,
+        'valve_system': 'DOHC',
+        'valve_count': 4,
+        'has_vva': 0,
+        'vva_transition_rpm': 0,
+        'cooling': 'liquid',
+        'ecu_type': 'Denso FI',
+        'flash_tool': 'Suzuki SDS / K-Line Adapter',
+        'stock_rev_limit_soft': 11500,
+        'stock_rev_limit_hard': 12000,
+        'stock_speed_limit': 130,
+        'safe_afr_mid': 13.3,
+        'safe_afr_wot': 12.9,
+        'safe_afr_min': 12.8,
+        'safe_afr_max': 13.5,
+        'max_safe_rev_raise': 12500,
+        'knock_rpm_zones': '',
+        'expected_speed_by_level': '1:145.0,2:151.0,3:157.0,4:163.0',
+      },
+      // 10. Suzuki Address 125
+      {
+        'id': 'suzuki_address125_std_2022',
+        'brand': 'Suzuki',
+        'model': 'Address 125',
+        'year_from': 2022,
+        'year_to': 0,
+        'variant': 'Standard',
+        'displacement': 124,
+        'compression_ratio': 10.0,
+        'bore': 53.5,
+        'stroke': 55.2,
+        'valve_system': 'SOHC',
+        'valve_count': 2,
+        'has_vva': 0,
+        'vva_transition_rpm': 0,
+        'cooling': 'air',
+        'ecu_type': 'Denso FI',
+        'flash_tool': 'Suzuki SDS / Generic Denso Tuner',
+        'stock_rev_limit_soft': 8500,
+        'stock_rev_limit_hard': 9000,
+        'stock_speed_limit': 100,
+        'safe_afr_mid': 13.6,
+        'safe_afr_wot': 13.2,
+        'safe_afr_min': 13.0,
+        'safe_afr_max': 13.8,
+        'max_safe_rev_raise': 9500,
+        'knock_rpm_zones': '',
+        'expected_speed_by_level': '1:110.0,2:115.0,3:118.0,4:121.0',
       },
     ];
 
@@ -1099,6 +1202,347 @@ class ModelsSeed {
         'fuel_map_json': _buildFuelMapJson(afrMid: 12.8, afrWot: 12.5, stockRevLimitSoft: 13000),
         'ignition_map_json': _buildIgnitionMapJson(34),
         'required_features': 'dohc,displacement300Plus,liquidCooled', 'incompatible_with': '', 'min_displacement': 300, 'max_displacement': 9999, 'fuel_requirement': 'RON97',
+      },
+    ]);
+  }
+
+  // ===========================================================================
+  // 8. SUZUKI RAIDER R150 FI — 6 profiles
+  // Air-cooled DOHC 147cc, 11.5:1 CR → maxTimingAdvance +3° (capped at +2° for air-cool margin)
+  // ===========================================================================
+  static Future<void> _seedRaiderR150FiProfiles(Database db) async {
+    const id = 'suzuki_raider150fi_std_2018';
+    await _insert(db, [
+      {
+        'id': 'raider150fi_topspeed',
+        'motorcycle_model_id': id,
+        'type': 'topSpeed',
+        'name_taglish': 'Top Speed — Max Bilis',
+        'description_taglish':
+            'Para sa maximum na bilis sa highway. Tinanggal ang speed limiter, '
+            '+2° timing advance, at enriched WOT AFR para sa power. '
+            'Air-cooled kaya limitado sa +2° para maiwasan ang overheating.',
+        'afr_target_mid': 13.3, 'afr_target_wot': 13.0,
+        'timing_advance_deg': 2, 'rev_limit_raise': 500, 'remove_speed_limiter': 1,
+        'safety_score': 85,
+        'expected_benefits': 'Est. +8–12 km/h; speed limiter deleted; full 12,000 RPM pull',
+        'fuel_consumption_note': 'Kailangan ng RON95+. Mas mataas na fuel use.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.3, afrWot: 13.0, stockRevLimitSoft: 12000),
+        'ignition_map_json': _buildIgnitionMapJson(32),
+        'required_features': 'dohc', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON95',
+      },
+      {
+        'id': 'raider150fi_balanced',
+        'motorcycle_model_id': id,
+        'type': 'balanced',
+        'name_taglish': 'Balanced — Para sa Lahat',
+        'description_taglish':
+            'Best all-around profile para sa Raider. Speed limiter deleted, '
+            '+1° timing, at smooth na AFR curve para sa highway at lungsod.',
+        'afr_target_mid': 13.4, 'afr_target_wot': 13.1,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 1,
+        'safety_score': 91,
+        'expected_benefits': '+4–6 km/h top end; smooth mid-range pull; balanced performance',
+        'fuel_consumption_note': 'Bahagyang mas mataas — ~5–8% kumpara sa stock.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.4, afrWot: 13.1, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(31),
+        'required_features': 'dohc', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'raider150fi_cityresponse',
+        'motorcycle_model_id': id,
+        'type': 'cityResponse',
+        'name_taglish': 'City Response — Bilis sa Traffic',
+        'description_taglish':
+            'Sharper throttle response para sa stop-and-go sa lungsod. '
+            'Richer mid-range AFR para sa mas mabilis na pull mula 0–80 km/h.',
+        'afr_target_mid': 13.5, 'afr_target_wot': 13.2,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 93,
+        'expected_benefits': 'Mas mabilis na 0–80 km/h; sharper throttle response sa traffic',
+        'fuel_consumption_note': 'Halos katulad ng stock na fuel use.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.5, afrWot: 13.2, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(31),
+        'required_features': 'dohc', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'raider150fi_eco',
+        'motorcycle_model_id': id,
+        'type': 'eco',
+        'name_taglish': 'Eco — Tipid na Gasolina',
+        'description_taglish':
+            'Lean light-throttle map para sa maximum km/L. Ideal para sa '
+            'commuting at mga delivery rider na gumagamit ng Raider R150.',
+        'afr_target_mid': 13.7, 'afr_target_wot': 13.4,
+        'timing_advance_deg': 0, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 96,
+        'expected_benefits': 'Est. -8–12% fuel savings; smoother idle; halos walang acceleration loss',
+        'fuel_consumption_note': 'Pinaka-tipid na profile. Ideal para sa commuting.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.7, afrWot: 13.4, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(30),
+        'required_features': 'dohc', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'raider150fi_exhausttune',
+        'motorcycle_model_id': id,
+        'type': 'exhaustTune',
+        'name_taglish': 'Exhaust Tune — Para sa Free-Flow',
+        'description_taglish':
+            'Richer mid-range map para sa mga may aftermarket exhaust. '
+            'Tinanggal ang decel popping at lean surge na dulot ng free-flow muffler.',
+        'afr_target_mid': 13.3, 'afr_target_wot': 13.0,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 1,
+        'safety_score': 88,
+        'expected_benefits': 'Walang decel pop; mas smooth na mid-range; komplemento ng free-flow exhaust',
+        'fuel_consumption_note': 'Kailangan ng RON95. Hindi para sa stock exhaust.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.3, afrWot: 13.0, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(31),
+        'required_features': 'dohc', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON95',
+      },
+      {
+        'id': 'raider150fi_track',
+        'motorcycle_model_id': id,
+        'type': 'track',
+        'name_taglish': 'Track Day — Raider Cup Mode',
+        'description_taglish':
+            'Aggressive full-performance profile para sa track days at Raider Cup. '
+            'MAX timing (+2°), enriched WOT AFR, at full 12,000 RPM rev limit. '
+            'HINDI para sa pang-araw-araw — track o legal race events lamang.',
+        'afr_target_mid': 13.0, 'afr_target_wot': 12.8,
+        'timing_advance_deg': 2, 'rev_limit_raise': 500, 'remove_speed_limiter': 1,
+        'safety_score': 78,
+        'expected_benefits': 'Max power; +12–15 km/h; full rev limit; para sa track at racing events',
+        'fuel_consumption_note': 'RON97 REQUIRED. Detonation risk sa mas mababang gasolina.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.0, afrWot: 12.8, stockRevLimitSoft: 12000),
+        'ignition_map_json': _buildIgnitionMapJson(32),
+        'required_features': 'dohc', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON97',
+      },
+    ]);
+  }
+
+  // ===========================================================================
+  // 9. SUZUKI GSX-S150 — 6 profiles
+  // Liquid-cooled DOHC 147cc, 11.5:1 CR → maxTimingAdvance +3° (liquid-cooled allows full advance)
+  // ===========================================================================
+  static Future<void> _seedGsxS150Profiles(Database db) async {
+    const id = 'suzuki_gsxs150_std_2017';
+    await _insert(db, [
+      {
+        'id': 'gsxs150_topspeed',
+        'motorcycle_model_id': id,
+        'type': 'topSpeed',
+        'name_taglish': 'Top Speed — Max Bilis',
+        'description_taglish':
+            'Maximum performance profile para sa GSX-S150. Full +3° timing advance '
+            '(liquid-cooled kaya kaya nito), enriched WOT AFR, at +500 RPM raise. '
+            'Kailangan ng RON97.',
+        'afr_target_mid': 13.1, 'afr_target_wot': 12.9,
+        'timing_advance_deg': 3, 'rev_limit_raise': 500, 'remove_speed_limiter': 1,
+        'safety_score': 82,
+        'expected_benefits': 'Est. +10–15 km/h; speed limiter deleted; max high-RPM power',
+        'fuel_consumption_note': 'RON97 REQUIRED. Liquid-cooled kaya mas kaya ng timing — huwag gamitin sa RON95 pababa.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.1, afrWot: 12.9, stockRevLimitSoft: 12000),
+        'ignition_map_json': _buildIgnitionMapJson(33),
+        'required_features': 'dohc,liquidCooled', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON97',
+      },
+      {
+        'id': 'gsxs150_balanced',
+        'motorcycle_model_id': id,
+        'type': 'balanced',
+        'name_taglish': 'Balanced — Daily at Highway',
+        'description_taglish':
+            'Best all-around profile para sa GSX-S150. +2° timing, enriched WOT, '
+            'at smooth na power delivery sa lahat ng RPM range.',
+        'afr_target_mid': 13.2, 'afr_target_wot': 12.9,
+        'timing_advance_deg': 2, 'rev_limit_raise': 0, 'remove_speed_limiter': 1,
+        'safety_score': 90,
+        'expected_benefits': '+6–8 km/h top end; smooth pull sa 6,000–11,500 RPM; highway-ready',
+        'fuel_consumption_note': 'Kailangan ng RON95+. ~8–10% mas mataas na fuel use.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.2, afrWot: 12.9, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(32),
+        'required_features': 'dohc,liquidCooled', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON95',
+      },
+      {
+        'id': 'gsxs150_cityresponse',
+        'motorcycle_model_id': id,
+        'type': 'cityResponse',
+        'name_taglish': 'City Response — Nakaka-engganyo sa Traffic',
+        'description_taglish':
+            'Sharper throttle response para sa lungsod. +2° timing at richer '
+            'mid-range para sa mas mabilis na pull sa 2,000–6,000 RPM.',
+        'afr_target_mid': 13.3, 'afr_target_wot': 13.0,
+        'timing_advance_deg': 2, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 92,
+        'expected_benefits': 'Mas mabilis na 0–80 km/h; sharper mid-range throttle; city at traffic-friendly',
+        'fuel_consumption_note': 'Bahagyang mas mataas na fuel use sa RON95.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.3, afrWot: 13.0, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(32),
+        'required_features': 'dohc,liquidCooled', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON95',
+      },
+      {
+        'id': 'gsxs150_eco',
+        'motorcycle_model_id': id,
+        'type': 'eco',
+        'name_taglish': 'Eco — Tipid na Gasolina',
+        'description_taglish':
+            'Lean light-throttle map para sa maximum km/L. Smooth cruising sa '
+            'RON91 na walang sinasayang na fuel sa low-throttle na kondisyon.',
+        'afr_target_mid': 13.5, 'afr_target_wot': 13.2,
+        'timing_advance_deg': 0, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 95,
+        'expected_benefits': 'Est. -10–14% fuel savings; smoother low-RPM cruising; pinaka-tipid',
+        'fuel_consumption_note': 'Pinaka-tipid na option para sa GSX-S150.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.5, afrWot: 13.2, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(30),
+        'required_features': 'dohc,liquidCooled', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'gsxs150_track',
+        'motorcycle_model_id': id,
+        'type': 'track',
+        'name_taglish': 'Track Day — Full Aggro Mode',
+        'description_taglish':
+            'Pinaka-aggressive na profile para sa GSX-S150. MAX timing (+3°), '
+            'pinaka-enriched na WOT AFR (12.8), at full 12,000 RPM. '
+            'PARA SA TRACK DAYS LAMANG — delikado sa kalye.',
+        'afr_target_mid': 13.0, 'afr_target_wot': 12.8,
+        'timing_advance_deg': 3, 'rev_limit_raise': 500, 'remove_speed_limiter': 1,
+        'safety_score': 76,
+        'expected_benefits': 'Max power para sa track; full 12,000 RPM; pinakamatinding performance',
+        'fuel_consumption_note': 'RON97 REQUIRED. HINDI para sa kalye.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.0, afrWot: 12.8, stockRevLimitSoft: 12000),
+        'ignition_map_json': _buildIgnitionMapJson(33),
+        'required_features': 'dohc,liquidCooled', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON97',
+      },
+      {
+        'id': 'gsxs150_handling',
+        'motorcycle_model_id': id,
+        'type': 'handling',
+        'name_taglish': 'Handling — Flat at Predictable',
+        'description_taglish':
+            'Flat AFR curve sa lahat ng RPM para sa predictable na throttle response '
+            'sa kurbada at twisty roads. Hindi para sa max speed — para sa precision driving.',
+        'afr_target_mid': 13.3, 'afr_target_wot': 13.1,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 91,
+        'expected_benefits': 'Predictable throttle sa kurbada; walang surging; pinaka-consistent na power delivery',
+        'fuel_consumption_note': 'Moderate fuel use. RON95 recommended.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.3, afrWot: 13.1, stockRevLimitSoft: 11500),
+        'ignition_map_json': _buildIgnitionMapJson(31),
+        'required_features': 'dohc,liquidCooled', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON95',
+      },
+    ]);
+  }
+
+  // ===========================================================================
+  // 10. SUZUKI ADDRESS 125 — 6 profiles
+  // Air-cooled SOHC 2-valve 124cc, 10.0:1 CR → maxTimingAdvance +5° (capped at +2°)
+  // ===========================================================================
+  static Future<void> _seedAddress125Profiles(Database db) async {
+    const id = 'suzuki_address125_std_2022';
+    await _insert(db, [
+      {
+        'id': 'address125_topspeed',
+        'motorcycle_model_id': id,
+        'type': 'topSpeed',
+        'name_taglish': 'Top Speed — Pinakamabilis ang Scooter',
+        'description_taglish':
+            'Para sa maximum na bilis ng Address 125. +2° timing, enriched WOT AFR, '
+            'at +500 RPM raise. Speed limiter deleted. Kailangan ng RON95.',
+        'afr_target_mid': 13.4, 'afr_target_wot': 13.1,
+        'timing_advance_deg': 2, 'rev_limit_raise': 500, 'remove_speed_limiter': 1,
+        'safety_score': 86,
+        'expected_benefits': 'Est. +5–8 km/h top end; speed limiter deleted; full 9,000 RPM pull',
+        'fuel_consumption_note': 'Kailangan ng RON95. Hindi gaanong malaki ang pagbabago sa fuel use.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.4, afrWot: 13.1, stockRevLimitSoft: 9000),
+        'ignition_map_json': _buildIgnitionMapJson(30),
+        'required_features': '', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON95',
+      },
+      {
+        'id': 'address125_balanced',
+        'motorcycle_model_id': id,
+        'type': 'balanced',
+        'name_taglish': 'Balanced — Pang-Araw-Araw',
+        'description_taglish':
+            'Best all-around profile para sa Address 125. Speed limiter deleted, '
+            '+1° timing, at smooth na AFR para sa lungsod at maikling highway.',
+        'afr_target_mid': 13.5, 'afr_target_wot': 13.2,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 1,
+        'safety_score': 92,
+        'expected_benefits': '+3–5 km/h top end; smoother power delivery; speed limiter deleted',
+        'fuel_consumption_note': 'Bahagyang mas mataas — ~4–6% kumpara sa stock.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.5, afrWot: 13.2, stockRevLimitSoft: 8500),
+        'ignition_map_json': _buildIgnitionMapJson(29),
+        'required_features': '', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'address125_cityresponse',
+        'motorcycle_model_id': id,
+        'type': 'cityResponse',
+        'name_taglish': 'City Response — Mas Agile sa Traffic',
+        'description_taglish':
+            'Sharper throttle response para sa traffic. Mas mabilis na pull '
+            'sa 0–60 km/h. Ideal para sa mga delivery rider at daily commuter.',
+        'afr_target_mid': 13.6, 'afr_target_wot': 13.2,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 94,
+        'expected_benefits': 'Mas mabilis na 0–60 km/h; better low-throttle response sa traffic',
+        'fuel_consumption_note': 'Halos katulad ng stock.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.6, afrWot: 13.2, stockRevLimitSoft: 8500),
+        'ignition_map_json': _buildIgnitionMapJson(29),
+        'required_features': '', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'address125_eco',
+        'motorcycle_model_id': id,
+        'type': 'eco',
+        'name_taglish': 'Eco — Pinaka-Tipid',
+        'description_taglish':
+            'Maximum fuel economy map para sa Address 125. Lean AFR sa lahat ng '
+            'throttle positions. Ideal para sa delivery at long-distance commuting.',
+        'afr_target_mid': 13.8, 'afr_target_wot': 13.3,
+        'timing_advance_deg': 0, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 97,
+        'expected_benefits': 'Est. -10–15% fuel savings; pinaka-tipid na profile para sa scooter',
+        'fuel_consumption_note': 'Pinaka-tipid. Ideal para sa delivery at long commutes.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.8, afrWot: 13.3, stockRevLimitSoft: 8500),
+        'ignition_map_json': _buildIgnitionMapJson(28),
+        'required_features': '', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'address125_idlequality',
+        'motorcycle_model_id': id,
+        'type': 'idleQuality',
+        'name_taglish': 'Idle Quality — Ayos ang Idle',
+        'description_taglish':
+            'Fixes stalling at rough idle na común sa Address 125 sa matagal na '
+            'traffic. Slightly richer idle mixture at +1° timing para sa stable warm idle.',
+        'afr_target_mid': 13.7, 'afr_target_wot': 13.2,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 96,
+        'expected_benefits': 'Stable idle sa traffic; walang stalling; smoother warm-up',
+        'fuel_consumption_note': 'Stock level fuel use.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.7, afrWot: 13.2, stockRevLimitSoft: 8500),
+        'ignition_map_json': _buildIgnitionMapJson(29),
+        'required_features': '', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
+      },
+      {
+        'id': 'address125_coldstart',
+        'motorcycle_model_id': id,
+        'type': 'coldStart',
+        'name_taglish': 'Cold Start — Para sa Malamig na Umaga',
+        'description_taglish':
+            'Warm-up enrichment profile para sa malamig na umaga sa Baguio, '
+            'Benguet, at mataas na lugar. Better cold-start at stable warm-up '
+            'nang hindi kailangang hawakan ang throttle.',
+        'afr_target_mid': 13.5, 'afr_target_wot': 13.1,
+        'timing_advance_deg': 1, 'rev_limit_raise': 0, 'remove_speed_limiter': 0,
+        'safety_score': 97,
+        'expected_benefits': 'Better cold start; walang hesitation sa malamig na temperatura; stable warmup',
+        'fuel_consumption_note': 'Stock level fuel use. Para sa malamig na panahon.',
+        'fuel_map_json': _buildFuelMapJson(afrMid: 13.5, afrWot: 13.1, stockRevLimitSoft: 8500),
+        'ignition_map_json': _buildIgnitionMapJson(29),
+        'required_features': '', 'incompatible_with': '', 'min_displacement': 0, 'max_displacement': 9999, 'fuel_requirement': 'RON91',
       },
     ]);
   }

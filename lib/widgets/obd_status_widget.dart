@@ -15,13 +15,13 @@ class OBDStatusWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(bluetoothStatusProvider).valueOrNull
-        ?? BluetoothConnectionStatus.disconnected;
+        ?? AdapterConnectionStatus.disconnected;
     return _OBDStatusContent(status: status, onTap: onTap, showLabel: showLabel);
   }
 }
 
 class _OBDStatusContent extends StatelessWidget {
-  final BluetoothConnectionStatus status;
+  final AdapterConnectionStatus status;
   final VoidCallback? onTap;
   final bool showLabel;
 
@@ -31,9 +31,9 @@ class _OBDStatusContent extends StatelessWidget {
     required this.showLabel,
   });
 
-  bool get _connected => status == BluetoothConnectionStatus.connected;
-  bool get _scanning => status == BluetoothConnectionStatus.scanning ||
-      status == BluetoothConnectionStatus.connecting;
+  bool get _connected => status == AdapterConnectionStatus.connected;
+  bool get _scanning => status == AdapterConnectionStatus.scanning ||
+      status == AdapterConnectionStatus.connecting;
 
   Color get _color => _connected
       ? AppColors.safe
@@ -42,11 +42,11 @@ class _OBDStatusContent extends StatelessWidget {
           : AppColors.textSecondary;
 
   String get _label => switch (status) {
-        BluetoothConnectionStatus.connected => 'OBD: Nakakonekta',
-        BluetoothConnectionStatus.connecting => 'OBD: Connecting...',
-        BluetoothConnectionStatus.scanning => 'OBD: Scanning...',
-        BluetoothConnectionStatus.error => 'OBD: Connection Error',
-        BluetoothConnectionStatus.disconnected => 'OBD: Disconnected',
+        AdapterConnectionStatus.connected => 'OBD: Nakakonekta',
+        AdapterConnectionStatus.connecting => 'OBD: Connecting...',
+        AdapterConnectionStatus.scanning => 'OBD: Scanning...',
+        AdapterConnectionStatus.error => 'OBD: Connection Error',
+        AdapterConnectionStatus.disconnected => 'OBD: Disconnected',
       };
 
   @override
@@ -98,8 +98,8 @@ class OBDStatusDot extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(bluetoothStatusProvider).valueOrNull
-        ?? BluetoothConnectionStatus.disconnected;
-    final connected = status == BluetoothConnectionStatus.connected;
+        ?? AdapterConnectionStatus.disconnected;
+    final connected = status == AdapterConnectionStatus.connected;
     final color = connected ? AppColors.safe : AppColors.textSecondary;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(
