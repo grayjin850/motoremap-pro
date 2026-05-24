@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
@@ -31,17 +32,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _loadData() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final modelId = prefs.getString('selected_model_id');
       final sessions = await DbHelper.getRecentSessions(5);
+      final model = modelId != null
+          ? await DbHelper.getMotorcycleById(modelId)
+          : null;
       if (mounted) {
         setState(() {
           _recentSessions = sessions;
+          _selectedModel = model;
           _loading = false;
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
