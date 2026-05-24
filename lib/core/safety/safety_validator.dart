@@ -283,6 +283,52 @@ class SafetyValidator {
     return profile.timingAdvanceDeg > 1;
   }
 
+  /// Returns true when [profile] is compatible with [model].
+  /// A profile is incompatible when:
+  ///  - The model lacks a required engine feature (e.g., profile needs VVA but bike has none)
+  ///  - The model has a feature the profile explicitly forbids
+  ///  - The model displacement is outside the profile's allowed range
+  static bool isProfileCompatible(MotorcycleModel model, TuneProfile profile) {
+    final modelFeatures = _featuresOf(model);
+
+    // All required features must be present on the model
+    for (final req in profile.requiredFeatures) {
+      if (!modelFeatures.contains(req)) return false;
+    }
+
+    // No incompatible features may be present on the model
+    for (final inc in profile.incompatibleWith) {
+      if (modelFeatures.contains(inc)) return false;
+    }
+
+    // Displacement bounds
+    if (profile.minDisplacementCc > 0 &&
+        model.displacement < profile.minDisplacementCc) return false;
+    if (profile.maxDisplacementCc < 9999 &&
+        model.displacement > profile.maxDisplacementCc) return false;
+
+    return true;
+  }
+
+  static Set<EngineFeature> _featuresOf(MotorcycleModel model) {
+    final features = <EngineFeature>{};
+    if (model.hasVva) features.add(EngineFeature.vva);
+    if (model.valveSystem.toUpperCase().contains('DOHC')) {
+      features.add(EngineFeature.dohc);
+    } else {
+      features.add(EngineFeature.sohc);
+    }
+    features.add(EngineFeature.fuelInjected); // all seeded bikes are FI
+    if (model.cooling == 'liquid') {
+      features.add(EngineFeature.liquidCooled);
+    } else {
+      features.add(EngineFeature.airCooled);
+    }
+    if (model.displacement > 150) features.add(EngineFeature.displacement150Plus);
+    if (model.displacement > 300) features.add(EngineFeature.displacement300Plus);
+    return features;
+  }
+
   // ---------------------------------------------------------------------------
   // INDIVIDUAL VALIDATION HELPERS
   // ---------------------------------------------------------------------------

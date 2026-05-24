@@ -19,6 +19,7 @@ class ObdCommands {
   static const String o2Sensor = '0114';
   static const String mapSensor = '010B';
   static const String injectorTiming = '0110'; // MAF sensor as proxy for injection
+  static const String knockRetard = '01A6';    // Spark advance degrees (used to detect retard)
 
   // Response sentinel strings
   static const String noData = 'NODATA';

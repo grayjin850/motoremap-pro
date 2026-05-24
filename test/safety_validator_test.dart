@@ -472,4 +472,38 @@ void main() {
       );
     });
   });
+
+  group('SafetyValidator — calculateTuneSafetyScore knock zone check', () {
+    test('21. Model with knock zones + positive timing → KNOCK_ZONE_AGGRESSION warning, -20 pts', () {
+      final profile = _buildProfile(timingAdvance: 2); // positive timing
+      final result = SafetyValidator.calculateTuneSafetyScore(
+        model: _aeroxWithKnockZones,
+        profile: profile,
+        backupConfirmed: true,
+      );
+      // AFR safe (+30), timing safe for 11.5:1 at +2° (+30), rev safe (+20), knock zone fail (+0)
+      expect(result.score, equals(80));
+      expect(result.level, equals(SafetyLevel.warning));
+      expect(
+        result.warnings.any((w) => w.code == 'TUNE_KNOCK_ZONE_AGGRESSION'),
+        isTrue,
+      );
+    });
+
+    test('22. Model with knock zones + zero timing → knock zone check passes, full score', () {
+      final profile = _buildProfile(timingAdvance: 0); // no timing advance
+      final result = SafetyValidator.calculateTuneSafetyScore(
+        model: _aeroxWithKnockZones,
+        profile: profile,
+        backupConfirmed: true,
+      );
+      // AFR safe (+30), timing safe (+30), rev safe (+20), knock zone safe (+20) = 100
+      expect(result.score, equals(100));
+      expect(result.level, equals(SafetyLevel.approved));
+      expect(
+        result.warnings.any((w) => w.code == 'TUNE_KNOCK_ZONE_AGGRESSION'),
+        isFalse,
+      );
+    });
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,6 +55,10 @@ class _PostRemapScreenState extends ConsumerState<PostRemapScreen> {
     'Speed limiter — nag-a-activate sa tamang speed',
     'Engine braking — smooth, walang surge',
   ];
+
+  // OBD baseline snapshot — captured once at first OBD reading
+  String? _obdBaseline;
+  bool _baselineCaptured = false;
 
   // Section E — save
   final _notesController = TextEditingController();
@@ -124,6 +130,22 @@ class _PostRemapScreenState extends ConsumerState<PostRemapScreen> {
     ref.listen<AsyncValue<OBDReading>>(obdReadingProvider, (_, next) {
       next.whenData((reading) {
         if (!mounted) return;
+
+        // Capture baseline once — the first OBD snapshot before any remap action
+        if (!_baselineCaptured && reading.hasAnyData) {
+          final baseline = <String, dynamic>{};
+          if (reading.rpm != null) baseline['rpm'] = reading.rpm;
+          if (reading.coolantTempC != null) baseline['coolantTempC'] = reading.coolantTempC;
+          if (reading.mapKpa != null) baseline['mapKpa'] = reading.mapKpa;
+          if (reading.batteryVoltage != null) baseline['batteryVoltage'] = reading.batteryVoltage;
+          if (reading.tpsPercent != null) baseline['tpsPercent'] = reading.tpsPercent;
+          baseline['capturedAt'] = reading.timestamp.toIso8601String();
+          setState(() {
+            _obdBaseline = jsonEncode(baseline);
+            _baselineCaptured = true;
+          });
+        }
+
         final temp = reading.coolantTempC;
         if (temp != null) {
           if (!_warmUpReached && temp >= 70) {
@@ -721,6 +743,7 @@ class _PostRemapScreenState extends ConsumerState<PostRemapScreen> {
         tuneSafetyScore: tuneSafetyResult?.score,
         warningsTriggered: warnings,
         obdDataSummary: null,
+        obdBaseline: _obdBaseline,
         technicianNotes: _notesController.text.trim().isEmpty
             ? null
             : _notesController.text.trim(),

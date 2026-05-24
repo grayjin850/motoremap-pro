@@ -9,7 +9,7 @@ import 'models_seed.dart';
 /// Central SQLite helper for MotoRemap Pro.
 /// All DB access goes through the singleton [database] getter.
 class DbHelper {
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
   static const String _dbName = 'motoremap.db';
 
   static Database? _database;
@@ -42,7 +42,23 @@ class DbHelper {
 
   static Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    // Stub — v1 → v2 migrations go here when needed
+    if (oldVersion < 2) {
+      // v1 → v2: add profile compatibility columns + session obd_baseline
+      await db.execute(
+          "ALTER TABLE tune_profiles ADD COLUMN required_features TEXT NOT NULL DEFAULT ''");
+      await db.execute(
+          "ALTER TABLE tune_profiles ADD COLUMN incompatible_with TEXT NOT NULL DEFAULT ''");
+      await db.execute(
+          'ALTER TABLE tune_profiles ADD COLUMN min_displacement INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE tune_profiles ADD COLUMN max_displacement INTEGER NOT NULL DEFAULT 9999');
+      await db.execute(
+          "ALTER TABLE tune_profiles ADD COLUMN fuel_requirement TEXT NOT NULL DEFAULT 'RON91'");
+      await db.execute(
+          'ALTER TABLE sessions ADD COLUMN obd_baseline TEXT');
+      // Seed profiles for bikes that had none in v1
+      await ModelsSeed.seedAdditionalProfiles(db);
+    }
   }
 
   static Future<void> _createTables(Database db) async {
@@ -95,6 +111,11 @@ class DbHelper {
         fuel_consumption_note TEXT NOT NULL,
         fuel_map_json TEXT NOT NULL,
         ignition_map_json TEXT NOT NULL,
+        required_features TEXT NOT NULL DEFAULT '',
+        incompatible_with TEXT NOT NULL DEFAULT '',
+        min_displacement INTEGER NOT NULL DEFAULT 0,
+        max_displacement INTEGER NOT NULL DEFAULT 9999,
+        fuel_requirement TEXT NOT NULL DEFAULT 'RON91',
         FOREIGN KEY(motorcycle_model_id) REFERENCES motorcycles(id)
       )
     ''');
@@ -116,6 +137,7 @@ class DbHelper {
         tune_safety_score INTEGER,
         warnings_triggered TEXT NOT NULL DEFAULT '',
         obd_data_summary TEXT,
+        obd_baseline TEXT,
         technician_notes TEXT,
         result TEXT NOT NULL,
         requires_follow_up INTEGER NOT NULL DEFAULT 0,
@@ -330,29 +352,31 @@ class DbHelper {
         'fuel_consumption_note': p.fuelConsumptionNote,
         'fuel_map_json': p.fuelMapJson,
         'ignition_map_json': p.ignitionMapJson,
+        'required_features': p.requiredFeatures.map((e) => e.name).join(','),
+        'incompatible_with': p.incompatibleWith.map((e) => e.name).join(','),
+        'min_displacement': p.minDisplacementCc,
+        'max_displacement': p.maxDisplacementCc,
+        'fuel_requirement': p.fuelRequirement,
       };
 
   static TuneProfile _profileFromDbRow(Map<String, dynamic> row) {
-    return TuneProfile(
-      id: row['id'] as String,
-      motorcycleModelId: row['motorcycle_model_id'] as String,
-      type: ProfileType.values.firstWhere(
-        (e) => e.name == row['type'],
-        orElse: () => ProfileType.balanced,
-      ),
-      nameTaglish: row['name_taglish'] as String,
-      descriptionTaglish: row['description_taglish'] as String,
-      afrTargetMid: (row['afr_target_mid'] as num).toDouble(),
-      afrTargetWot: (row['afr_target_wot'] as num).toDouble(),
-      timingAdvanceDeg: row['timing_advance_deg'] as int,
-      revLimitRaise: row['rev_limit_raise'] as int,
-      removeSpeedLimiter: (row['remove_speed_limiter'] as int) == 1,
-      safetyScore: row['safety_score'] as int,
-      expectedBenefits: row['expected_benefits'] as String,
-      fuelConsumptionNote: row['fuel_consumption_note'] as String,
-      fuelMapJson: row['fuel_map_json'] as String,
-      ignitionMapJson: row['ignition_map_json'] as String,
-    );
+    return TuneProfile.fromMap({
+      ...row,
+      // Normalize snake_case keys to camelCase for fromMap
+      'motorcycleModelId': row['motorcycle_model_id'],
+      'nameTaglish': row['name_taglish'],
+      'descriptionTaglish': row['description_taglish'],
+      'afrTargetMid': row['afr_target_mid'],
+      'afrTargetWot': row['afr_target_wot'],
+      'timingAdvanceDeg': row['timing_advance_deg'],
+      'revLimitRaise': row['rev_limit_raise'],
+      'removeSpeedLimiter': row['remove_speed_limiter'],
+      'safetyScore': row['safety_score'],
+      'expectedBenefits': row['expected_benefits'],
+      'fuelConsumptionNote': row['fuel_consumption_note'],
+      'fuelMapJson': row['fuel_map_json'],
+      'ignitionMapJson': row['ignition_map_json'],
+    });
   }
 
   static Future<void> insertProfile(TuneProfile profile) async {
@@ -371,7 +395,7 @@ class DbHelper {
       'tune_profiles',
       where: 'motorcycle_model_id = ?',
       whereArgs: [motorcycleModelId],
-      orderBy: 'safety_score DESC',
+      orderBy: 'id ASC',
     );
     return rows.map(_profileFromDbRow).toList();
   }
@@ -408,6 +432,7 @@ class DbHelper {
         'tune_safety_score': s.tuneSafetyScore,
         'warnings_triggered': s.warningsTriggered.join('|'),
         'obd_data_summary': s.obdDataSummary,
+        'obd_baseline': s.obdBaseline,
         'technician_notes': s.technicianNotes,
         'result': s.result.name,
         'requires_follow_up': s.requiresFollowUp ? 1 : 0,
@@ -436,6 +461,7 @@ class DbHelper {
       tuneSafetyScore: row['tune_safety_score'] as int?,
       warningsTriggered: warnings,
       obdDataSummary: row['obd_data_summary'] as String?,
+      obdBaseline: row['obd_baseline'] as String?,
       technicianNotes: row['technician_notes'] as String?,
       result: SessionResult.values.firstWhere(
         (e) => e.name == row['result'],

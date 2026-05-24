@@ -248,8 +248,10 @@ class PdfGenerator {
               (profileMap['removeSpeedLimiter'] as int? ?? 0) == 1 ? 'YES' : 'No',
             ),
             dataRow(
-              'Profile Safety Score',
-              '${profileMap['safetyScore']} / 100',
+              'Computed Tune Safety Score',
+              sessionMap['tuneSafetyScore'] != null
+                  ? '${sessionMap['tuneSafetyScore']} / 100'
+                  : '${profileMap['safetyScore']} / 100 (reference only)',
             ),
             dataRow(
               'Expected Benefits',

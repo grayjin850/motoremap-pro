@@ -17,6 +17,9 @@ class SessionLog {
   final int? tuneSafetyScore;
   final List<String> warningsTriggered;
   final String? obdDataSummary; // JSON summary
+  /// OBD snapshot taken before the remap: rpm, coolantTempC, mapKpa, batteryVoltage.
+  /// Stored as JSON string — null when OBD was not connected at session start.
+  final String? obdBaseline;
   final String? technicianNotes;
   final SessionResult result;
   final bool requiresFollowUp;
@@ -38,6 +41,7 @@ class SessionLog {
     this.tuneSafetyScore,
     required this.warningsTriggered,
     this.obdDataSummary,
+    this.obdBaseline,
     this.technicianNotes,
     required this.result,
     required this.requiresFollowUp,
@@ -61,6 +65,7 @@ class SessionLog {
       'tuneSafetyScore': tuneSafetyScore,
       'warningsTriggered': warningsTriggered.join('|'),
       'obdDataSummary': obdDataSummary,
+      'obdBaseline': obdBaseline,
       'technicianNotes': technicianNotes,
       'result': result.name,
       'requiresFollowUp': requiresFollowUp ? 1 : 0,
@@ -90,6 +95,7 @@ class SessionLog {
       tuneSafetyScore: map['tuneSafetyScore'] as int?,
       warningsTriggered: warningsTriggered,
       obdDataSummary: map['obdDataSummary'] as String?,
+      obdBaseline: map['obdBaseline'] as String?,
       technicianNotes: map['technicianNotes'] as String?,
       result: SessionResult.values.firstWhere(
         (e) => e.name == map['result'],

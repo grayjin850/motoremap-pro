@@ -28,6 +28,11 @@ class OBDReading {
   /// MAP sensor reading in kPa. Null when NODATA.
   final int? mapKpa;
 
+  /// Knock retard in degrees (PID 01A6 — spark advance).
+  /// A value > 0° means the ECU is retarding timing to prevent knock.
+  /// Null when ECU does not support this PID.
+  final double? knockRetardDeg;
+
   /// Timestamp of when this reading was captured.
   final DateTime timestamp;
 
@@ -38,6 +43,7 @@ class OBDReading {
     this.batteryVoltage,
     this.o2SensorVoltage,
     this.mapKpa,
+    this.knockRetardDeg,
     required this.timestamp,
   });
 
@@ -49,6 +55,9 @@ class OBDReading {
       batteryVoltage != null ||
       o2SensorVoltage != null ||
       mapKpa != null;
+
+  /// True when ECU is actively retarding timing (knock event detected).
+  bool get isKnocking => (knockRetardDeg ?? 0) > 0;
 
   /// Empty reading for error/fallback states.
   factory OBDReading.empty() => OBDReading(timestamp: DateTime.now());
@@ -126,6 +135,7 @@ class OBDService {
     final battResp = await bluetooth.sendCommand(ObdCommands.batteryVoltage);
     final o2Resp = await bluetooth.sendCommand(ObdCommands.o2Sensor);
     final mapResp = await bluetooth.sendCommand(ObdCommands.mapSensor);
+    final knockResp = await bluetooth.sendCommand(ObdCommands.knockRetard);
 
     return OBDReading(
       rpm: rpmResp != null ? _parseRpm(rpmResp) : null,
@@ -134,6 +144,7 @@ class OBDService {
       batteryVoltage: battResp != null ? _parseBatteryVoltage(battResp) : null,
       o2SensorVoltage: o2Resp != null ? _parseO2Voltage(o2Resp) : null,
       mapKpa: mapResp != null ? _parseMap(mapResp) : null,
+      knockRetardDeg: knockResp != null ? _parseKnockRetard(knockResp) : null,
       timestamp: DateTime.now(),
     );
   }
@@ -251,6 +262,24 @@ class OBDService {
       if (data == null || data.length < 2) return null;
       final a = int.parse(data.substring(0, 2), radix: 16);
       return a; // kPa, 0-255
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Parse knock retard from PID 01A6 (spark advance).
+  /// Formula: (A - 128) / 2  — positive value = timing retard degrees
+  /// Returns null when ECU responds NODATA (most motorcycle ECUs don't support this PID).
+  double? _parseKnockRetard(String response) {
+    final clean = _cleanResponse(response);
+    if (clean == null) return null;
+    try {
+      final data = _stripHeader(clean, '41A6');
+      if (data == null || data.length < 2) return null;
+      final a = int.parse(data.substring(0, 2), radix: 16);
+      final advance = (a - 128) / 2.0; // negative = retard
+      // Retard means ECU is pulling timing — return absolute retard degrees
+      return advance < 0 ? advance.abs() : 0.0;
     } catch (_) {
       return null;
     }

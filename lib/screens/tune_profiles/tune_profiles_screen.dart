@@ -278,10 +278,24 @@ class _ProfileCard extends StatelessWidget {
       ProfileType.handling => Icons.turn_slight_right,
       ProfileType.balanced => Icons.balance,
       ProfileType.eco => Icons.eco,
+      ProfileType.throttleSharpening => Icons.flash_on,
+      ProfileType.throttleSmoothing => Icons.waves,
+      ProfileType.idleQuality => Icons.radio_button_checked,
+      ProfileType.endurance => Icons.track_changes,
+      ProfileType.vvaTransition => Icons.trending_up,
+      ProfileType.revLimiterRaise => Icons.arrow_upward,
+      ProfileType.decelFuelCut => Icons.arrow_downward,
+      ProfileType.coldStart => Icons.ac_unit,
+      ProfileType.altitudeCompensation => Icons.terrain,
+      ProfileType.exhaustTune => Icons.air,
+      ProfileType.track => Icons.emoji_events,
     };
+
+    final compatible = SafetyValidator.isProfileCompatible(model, profile);
     final vvaWarning =
         SafetyValidator.requiresVvaWarning(model: model, profile: profile);
     final timingUnsafe = profile.timingAdvanceDeg > model.maxTimingAdvance;
+    final requiresHighOctane = profile.fuelRequirement != 'RON91';
 
     return SingleChildScrollView(
       child: Container(
@@ -413,6 +427,50 @@ class _ProfileCard extends StatelessWidget {
                           : '+${profile.revLimitRaise} RPM',
                     ),
                   ]),
+
+                  if (!compatible) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.danger.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.danger.withValues(alpha: 0.5)),
+                      ),
+                      child: const Row(children: [
+                        Icon(Icons.block, color: AppColors.danger, size: 14),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Hindi compatible sa motor na ito. Kailangan ng iba pang engine feature.',
+                            style: TextStyle(color: AppColors.danger, fontSize: 11),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ],
+
+                  if (requiresHighOctane) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.local_gas_station, color: AppColors.warning, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Kailangan ng ${profile.fuelRequirement} o mas mataas',
+                          style: const TextStyle(color: AppColors.warning, fontSize: 12),
+                        ),
+                      ]),
+                    ),
+                  ],
 
                   if (profile.removeSpeedLimiter) ...[
                     const SizedBox(height: 8),

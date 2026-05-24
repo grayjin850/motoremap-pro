@@ -21,6 +21,7 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
 
   String? _criticalAlert;
   String? _warningAlert;
+  bool _knockBlockActive = false;
 
   // ---------------------------------------------------------------------------
   // Build
@@ -51,6 +52,16 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
       error: (_, __) => OBDReading.empty(),
     );
 
+    return Stack(
+      children: [
+        _buildMainScaffold(context, reading, btStatus),
+        if (_knockBlockActive) _buildKnockBlockOverlay(),
+      ],
+    );
+  }
+
+  Widget _buildMainScaffold(
+      BuildContext context, OBDReading reading, BluetoothConnectionStatus btStatus) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live OBD Monitor'),
@@ -83,6 +94,56 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
           if (!reading.hasAnyData) _buildNoDataBanner(),
           Expanded(child: _showLog ? _buildLogView() : _buildGaugeGrid(reading)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildKnockBlockOverlay() {
+    return Container(
+      color: AppColors.danger.withValues(alpha: 0.92),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.warning_rounded, color: Colors.white, size: 80),
+              const SizedBox(height: 24),
+              const Text(
+                'KNOCK DETECTED',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Ang ECU ay nag-retard ng timing dahil sa knock.\n\n'
+                'IHINTO ang remap operation ngayon.\n'
+                'Suriin ang gasolina, timing advance, at compression bago magpatuloy.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.close),
+                label: const Text('Dismiss — Alam ko ang panganib'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.danger,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                ),
+                onPressed: () => setState(() => _knockBlockActive = false),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -125,6 +186,15 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
         warning == null) {
       warning =
           '🟡 PAALALA: Mababa ang baterya (${reading.batteryVoltage!.toStringAsFixed(1)}V). Suriin ang charging system.';
+    }
+
+    // Knock retard hard block
+    if (reading.isKnocking) {
+      critical =
+          '🔴 KNOCK DETECTED! ECU nag-retard ng ${reading.knockRetardDeg!.toStringAsFixed(1)}°. IHINTO ang remap agad!';
+      if (!_knockBlockActive) {
+        setState(() => _knockBlockActive = true);
+      }
     }
 
     if (critical != _criticalAlert || warning != _warningAlert) {
@@ -219,6 +289,27 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
           color: AppColors.primary,
           rangeLabel: '0 – 255 kPa',
         ),
+        _GaugeCard(
+          label: 'Knock Retard',
+          value: r.knockRetardDeg?.toStringAsFixed(1),
+          unit: '°',
+          progress: r.knockRetardDeg != null
+              ? (r.knockRetardDeg! / 10).clamp(0.0, 1.0)
+              : null,
+          color: r.knockRetardDeg == null
+              ? AppColors.textSecondary
+              : r.knockRetardDeg! > 3
+                  ? AppColors.danger
+                  : r.knockRetardDeg! > 0
+                      ? AppColors.warning
+                      : AppColors.safe,
+          rangeLabel: '0 – 10° retard',
+          footnote: r.knockRetardDeg == null
+              ? 'PID 01A6 — not supported\nby most motorcycle ECUs'
+              : r.isKnocking
+                  ? '⚠ ACTIVE KNOCK — ihinto!'
+                  : 'Normal — walang knock',
+        ),
       ],
     );
   }
@@ -274,6 +365,7 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
           Expanded(flex: 2, child: Text('°C', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600))),
           Expanded(flex: 2, child: Text('V', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600))),
           Expanded(flex: 2, child: Text('O2V', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600))),
+          Expanded(flex: 2, child: Text('Knock', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600))),
         ]),
       ),
       Expanded(
@@ -297,6 +389,14 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
                 Expanded(flex: 2, child: Text(e.coolantTempC?.toString() ?? '--', style: const TextStyle(color: AppColors.textPrimary, fontSize: 11))),
                 Expanded(flex: 2, child: Text(e.batteryVoltage?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: AppColors.textPrimary, fontSize: 11))),
                 Expanded(flex: 2, child: Text(e.o2SensorVoltage?.toStringAsFixed(3) ?? '--', style: const TextStyle(color: AppColors.textPrimary, fontSize: 11))),
+                Expanded(flex: 2, child: Text(
+                  e.knockRetardDeg?.toStringAsFixed(1) ?? '--',
+                  style: TextStyle(
+                    color: e.isKnocking ? AppColors.danger : AppColors.textPrimary,
+                    fontSize: 11,
+                    fontWeight: e.isKnocking ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                )),
               ]),
             );
           },
@@ -415,7 +515,7 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
 
   void _exportCsv() {
     final buf = StringBuffer();
-    buf.writeln('Timestamp,RPM,TPS%,CoolantTempC,BatteryV,O2SensorV,MAP_kPa');
+    buf.writeln('Timestamp,RPM,TPS%,CoolantTempC,BatteryV,O2SensorV,MAP_kPa,KnockRetard_deg');
     for (final r in _log) {
       buf.writeln(
           '${r.timestamp.toIso8601String()},'
@@ -424,7 +524,8 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
           '${r.coolantTempC ?? ""},'
           '${r.batteryVoltage?.toStringAsFixed(2) ?? ""},'
           '${r.o2SensorVoltage?.toStringAsFixed(3) ?? ""},'
-          '${r.mapKpa ?? ""}');
+          '${r.mapKpa ?? ""},'
+          '${r.knockRetardDeg?.toStringAsFixed(2) ?? ""}');
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
