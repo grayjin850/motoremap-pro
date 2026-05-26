@@ -75,6 +75,7 @@ class _FlashScreenState extends State<FlashScreen> {
 
   void _evaluateGate() {
     _gateResult = PreFlashGate.evaluate(
+      adapterSupportsWrite: widget.session.adapter.supportsWrite,
       batteryVoltage: widget.batteryVoltage,
       engineRpm: widget.engineRpm,
       coolantTempC: widget.coolantTempC,

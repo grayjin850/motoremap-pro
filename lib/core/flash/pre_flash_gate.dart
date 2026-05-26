@@ -38,19 +38,22 @@ class PreFlashGateResult {
   List<GateCheck> get failedChecks => checks.where((c) => !c.passed).toList();
 }
 
-/// Pre-flash safety gate — ALL 7 conditions must be green before flashing.
+/// Pre-flash safety gate — ALL 8 conditions must be green before flashing.
 ///
 /// Condition list:
-///   1. Battery ≥ 12.4V
-///   2. RPM = 0 (engine stopped)
-///   3. Coolant < 40°C (or air-cooled exemption)
-///   4. Backup verified (backup file readable, size matches)
-///   5. Checksum verified (modified ROM checksum is valid)
-///   6. Diff approved (tuner explicitly approved the diff viewer)
-///   7. Safety score ≥ 85 (at least 6 of 7 conditions met before this check)
+///   1. Wired USB adapter (supportsWrite = true) — Bluetooth cannot flash
+///   2. Battery ≥ 12.4V
+///   3. RPM = 0 (engine stopped)
+///   4. Coolant < 40°C (or air-cooled exemption)
+///   5. Backup verified (backup file readable, size matches)
+///   6. Checksum verified (modified ROM checksum is valid)
+///   7. Diff approved (tuner explicitly approved the diff viewer)
+///   8. Safety score ≥ 85 (at least 7 of 8 conditions met before this check)
 class PreFlashGate {
   /// Evaluate all gate conditions.
   ///
+  /// [adapterSupportsWrite] must be true only for wired USB K-Line adapters.
+  ///   Bluetooth (ELM327) adapters always return false — they cannot flash.
   /// [batteryVoltage] from OBD live data (V).
   /// [engineRpm] from OBD live data.
   /// [coolantTempC] from OBD live data (-1 if unavailable / air-cooled ECU).
@@ -62,6 +65,7 @@ class PreFlashGate {
   /// [widebandConfirmed] advisory — true if mechanic has a wideband O2 sensor
   ///   to validate the tune after flashing. Does NOT block flash if false.
   static PreFlashGateResult evaluate({
+    required bool adapterSupportsWrite,
     required double batteryVoltage,
     required int engineRpm,
     required double coolantTempC,
@@ -73,7 +77,17 @@ class PreFlashGate {
   }) {
     final checks = <GateCheck>[];
 
-    // 1. Battery
+    // 1. Wired USB adapter required — Bluetooth (ELM327) cannot flash ECU ROM
+    checks.add(GateCheck(
+      label: 'Wired USB adapter connected (OpenPort 2.0 / K-Line)',
+      passed: adapterSupportsWrite,
+      detail: adapterSupportsWrite
+          ? 'USB K-Line adapter confirmed — write capable'
+          : 'BLOCKED: Bluetooth adapters cannot flash. '
+            'Connect a wired USB K-Line adapter (OpenPort 2.0 or equivalent).',
+    ));
+
+    // 2. Battery
     checks.add(GateCheck(
       label: 'Battery voltage ≥ 12.4V',
       passed: batteryVoltage >= 12.4,
