@@ -94,6 +94,7 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
       body: Column(
         children: [
           _buildStatusBar(btStatus),
+          _buildSensorAccuracyBanner(),
           if (_criticalAlert != null) _buildAlertBanner(_criticalAlert!, isCritical: true),
           if (_warningAlert != null) _buildAlertBanner(_warningAlert!, isCritical: false),
           if (!reading.hasAnyData) _buildNoDataBanner(),
@@ -474,6 +475,41 @@ class _LiveMonitorScreenState extends ConsumerState<LiveMonitorScreen> {
   // ---------------------------------------------------------------------------
   // Status, alert, no-data banners
   // ---------------------------------------------------------------------------
+
+  /// Permanent, non-dismissible banner reminding the mechanic that Bluetooth
+  /// OBD data cannot be used as the authority for tuning decisions.
+  ///
+  /// The narrow-band O2 sensor only accurately reads stoichiometric AFR (14.7:1).
+  /// ELM327 polling is 3–5 Hz — too slow to catch lean spikes at high RPM.
+  /// A wideband O2 sensor (Innovate, AEM, PLX) is required for real tuning.
+  Widget _buildSensorAccuracyBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      color: const Color(0xFF2D1A00), // dark amber background
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.sensors_off, color: Color(0xFFFFAB40), size: 16),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'REFERENCE ONLY — Hindi ito wideband sensor. '
+              'Ang Bluetooth OBD (ELM327) ay gumagamit ng narrowband O2 voltage — '
+              'hindi accurate ang AFR sa labas ng stoich (14.7:1). '
+              'Para sa actual tuning validation: gumamit ng wideband O2 sensor '
+              '(Innovate LC-2, AEM X-Series) at dyno run.',
+              style: TextStyle(
+                color: Color(0xFFFFCC80),
+                fontSize: 10,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildStatusBar(AdapterConnectionStatus status) {
     final isConnected = status == AdapterConnectionStatus.connected;

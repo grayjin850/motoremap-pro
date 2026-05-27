@@ -84,6 +84,18 @@ NEVER violate these:
 - 111 tests as of Phase 7. If count drops, investigate before proceeding.
 - Test files mirror source path: `lib/core/binary/rom_parser.dart` → `test/rom_parser_test.dart`
 
+## Build Commands
+
+```powershell
+# Android APK
+flutter build apk --release
+
+# Windows UI preview (requires Visual Studio C++ tools)
+.\run_windows.ps1
+```
+
+**APK build note:** `flutter_bluetooth_serial-0.4.0` and `usb_serial-0.4.0` in the pub cache have been manually patched for AGP 9 + Kotlin 2.x compatibility. If pub cache is cleared or packages are upgraded, re-apply patches documented in CLAUDE.md → "Known Build Fixes".
+
 ## Key Decisions Already Made (Don't Revisit)
 
 | Decision | Rationale |

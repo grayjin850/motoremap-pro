@@ -1,16 +1,14 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
+import 'web_open_url.dart';
 
 class WebLandingScreen extends StatelessWidget {
   const WebLandingScreen({super.key});
 
   static const _repoUrl = 'https://github.com/grayjin850/motoremap-pro';
 
-  void _openRepo() => html.window.open(_repoUrl, '_blank');
+  void _openRepo() => openUrl(_repoUrl);
 
   @override
   Widget build(BuildContext context) {

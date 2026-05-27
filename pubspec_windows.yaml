@@ -33,6 +33,13 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   build_runner: ^2.4.9
 
+# Override Android-only packages with local stubs for Windows desktop build
+dependency_overrides:
+  usb_serial:
+    path: packages/usb_serial_stub
+  flutter_bluetooth_serial:
+    path: packages/flutter_bluetooth_serial_stub
+
 flutter:
   uses-material-design: true
   assets:

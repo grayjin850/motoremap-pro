@@ -1,0 +1,11 @@
+name: usb_serial
+version: 0.4.0
+description: Stub for usb_serial — Windows/desktop no-op implementation.
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    USB device filter for K-Line adapters used with MotoRemap Pro.
+
+    Supported chips:
+    - FTDI FT232R / FT232H  (OpenPort 2.0, many clone adapters)
+    - Silicon Labs CP2102 / CP2104
+    - WCH CH340 / CH341
+    - Prolific PL2303
+
+    These are the four most common USB-to-serial chips found in
+    OpenPort 2.0 clones and K-Line USB adapters sold in the Philippines.
+-->
+<resources>
+    <!-- FTDI FT232R / FT232H / FT231X -->
+    <usb-device vendor-id="1027" product-id="24577" /> <!-- 0x0403/0x6001 FT232R -->
+    <usb-device vendor-id="1027" product-id="24596" /> <!-- 0x0403/0x6014 FT232H -->
+    <usb-device vendor-id="1027" product-id="24597" /> <!-- 0x0403/0x6015 FT231X -->
+
+    <!-- Silicon Labs CP2102 / CP2104 / CP2108 -->
+    <usb-device vendor-id="4292" product-id="60000" /> <!-- 0x10C4/0xEA60 CP2102 -->
+    <usb-device vendor-id="4292" product-id="60001" /> <!-- 0x10C4/0xEA61 CP2104 -->
+
+    <!-- WCH CH340 / CH341 -->
+    <usb-device vendor-id="6790" product-id="29987" /> <!-- 0x1A86/0x7523 CH340 -->
+    <usb-device vendor-id="6790" product-id="21795" /> <!-- 0x1A86/0x5523 CH341 -->
+
+    <!-- Prolific PL2303 -->
+    <usb-device vendor-id="1659" product-id="8963" />  <!-- 0x067B/0x2303 PL2303 -->
+</resources>
